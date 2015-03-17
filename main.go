@@ -42,6 +42,8 @@ func main() {
 
 	http.HandleFunc("/", hello)
 	http.HandleFunc("/weather/", weather)
+
+	fmt.Println("Listening on :8000")
 	http.ListenAndServe(":8000", nil)
 }
 
@@ -139,17 +141,36 @@ func (w weatherUnderground) temperature(city string) (float64, error) {
 }
 
 func (w multiWeatherProvider) temperature(city string) (float64, error) {
+	// Make one channel for temperatures and one channel for errors.
+	// Each provider will push a value into only one channel.
+	temps := make(chan float64, len(w))
+	errs  := make(chan error,   len(w))
+
+	// For each provider, spawn a goroutine with an anonymous function.
+	// That function will invoke the temperature method and forward the response.
+	for _, provider := range w {
+		go func(p weatherProvider) {
+			k, err := p.temperature(city)
+			if err != nil {
+				errs <- err
+				return
+			}
+			temps <- k
+		}(provider)
+	}
+
 	sum := 0.0
 
-	for _, provider := range w {
-		k, err := provider.temperature(city)
-		f := (k * 1.8) - 459.67
-		fmt.Printf("%.2fK converts to %.2fF\n", k, f)
-		if err != nil {
-			return 0, err
+	// Collect a temperature or error from each provider
+	for i := 0; i < len(w); i++ {
+		select {
+			case temp := <- temps:
+				f := (temp * 1.8) - 459.67
+				fmt.Printf("%.2fK converts to %.2fF\n", temp, f)
+				sum += f
+			case err := <- errs:
+				return 0, err
 		}
-
-		sum += f
 	}
 
 	return sum / float64(len(w)), nil
