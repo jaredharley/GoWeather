@@ -25,7 +25,7 @@ type weatherProvider interface {
 }
 
 type openWeatherMap struct{}
-type weatherUnderground struct {}
+type weatherUnderground struct{}
 type multiWeatherProvider []weatherProvider
 
 var wuKey string
@@ -35,7 +35,7 @@ var mw multiWeatherProvider
 func main() {
 	getAPIKeys()
 
-	mw = multiWeatherProvider {
+	mw = multiWeatherProvider{
 		openWeatherMap{},
 		weatherUnderground{},
 	}
@@ -56,7 +56,8 @@ func getAPIKeys() {
 	// Weather Underground
 	key, err := ioutil.ReadFile("weatherunderground.key")
 	if err != nil {
-		fmt.Printf("Unable to read weatherunderground keyfile.\n")	
+		fmt.Printf("Unable to read weatherunderground keyfile.\n")
+		fmt.Println(err)
 	} else {
 		fmt.Printf("Weather Underground API key loaded: %s\n", key)
 	}
@@ -87,7 +88,7 @@ func weather(writer http.ResponseWriter, req *http.Request) {
 }
 
 // query takes the name of a city as a string and queries the OpenWeatherMap API
-// for weather data. This function either returns a weatherData struct of the 
+// for weather data. This function either returns a weatherData struct of the
 // returned data, or an error object.
 func (w openWeatherMap) temperature(city string) (float64, error) {
 	resp, err := http.Get("http://api.openweathermap.org/data/2.5/weather?q=" + city)
@@ -144,7 +145,7 @@ func (w multiWeatherProvider) temperature(city string) (float64, error) {
 	// Make one channel for temperatures and one channel for errors.
 	// Each provider will push a value into only one channel.
 	temps := make(chan float64, len(w))
-	errs  := make(chan error,   len(w))
+	errs := make(chan error, len(w))
 
 	// For each provider, spawn a goroutine with an anonymous function.
 	// That function will invoke the temperature method and forward the response.
@@ -164,12 +165,12 @@ func (w multiWeatherProvider) temperature(city string) (float64, error) {
 	// Collect a temperature or error from each provider
 	for i := 0; i < len(w); i++ {
 		select {
-			case temp := <- temps:
-				f := (temp * 1.8) - 459.67
-				fmt.Printf("%.2fK converts to %.2fF\n", temp, f)
-				sum += f
-			case err := <- errs:
-				return 0, err
+		case temp := <-temps:
+			f := (temp * 1.8) - 459.67
+			fmt.Printf("%.2fK converts to %.2fF\n", temp, f)
+			sum += f
+		case err := <-errs:
+			return 0, err
 		}
 	}
 
